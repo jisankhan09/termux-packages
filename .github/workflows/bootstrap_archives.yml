@@ -27,9 +27,18 @@ jobs:
 
       - name: Create bootstrap archive
         run: |
-          # গুরুত্বপূর্ণ: বুটস্ট্র্যাপ স্ক্রিপ্ট রান করার আগে এনভায়রনমেন্ট সেটআপ
+          # ১. এনভায়রনমেন্ট পাথ ঠিক করা
+          export TERMUX_SCRIPTDIR=$(pwd)
+          
+          # ২. প্রয়োজনীয় টুলস সেটআপ করা
           ./scripts/setup-ubuntu.sh
+          
+          # ৩. সঠিক পাথে স্ক্রিপ্টটি কল করা
+          # এখানে আমরা সরাসরি স্ক্রিপ্ট রান না করে ডকার এনভায়রনমেন্টের পাথ ধরিয়ে দিচ্ছি
+          sed -i "s|/home/builder/termux-packages|$TERMUX_SCRIPTDIR|g" ./scripts/build-bootstraps.sh
+          
           ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
+
 
       - name: Store artifacts
         uses: actions/upload-artifact@v4
