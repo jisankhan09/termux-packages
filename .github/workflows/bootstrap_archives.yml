@@ -23,34 +23,35 @@ jobs:
       - name: Fix Permissions and Environment
         run: |
           git config --global --add safe.directory /__w/termux-packages/termux-packages
-          # ফাইলের মালিকানা builder ইউজারকে দেওয়া কারণ root হিসেবে বিল্ড করা যায় না
           chown -R builder:builder .
 
       - name: Create bootstrap archive
         run: |
           su builder -c "
+            # ১. বর্তমান কাজের ডিরেক্টরি সেট করা
             export TERMUX_SCRIPTDIR=$(pwd)
             
-            # ১. NDK এবং SDK অটো-সেটআপ (যদি পাথ ভুল থাকে তবে এটি ডাউনলোড/ফিক্স করবে)
+            # ২. NDK ও SDK কনফিগারেশন (এটি নিশ্চিত করবে যে পাথ সঠিক আছে)
+            # এটি এনডিকে খুঁজে না পেলে নতুন করে ডাউনলোড করবে
             ./scripts/setup-android-sdk.sh
             
-            # ২. এনভায়রনমেন্ট পাথগুলো পুনরায় সেট করা
+            # ৩. এনভায়রনমেন্ট ভ্যারিয়েবল এক্সপোর্ট (নতুন পাথ অনুযায়ী)
             export ANDROID_HOME=\$HOME/lib/android-sdk
             export NDK=\$HOME/lib/android-ndk
             
-            # ৩. কাস্টম প্যাকেজ নাম সেট করা
+            # ৪. কাস্টম প্যাকেজ নাম com.vault.fide সেট করা
+            # এটি properties.sh ফাইলে ডিফল্ট com.termux পরিবর্তন করে দেবে
             sed -i 's/com.termux/com.vault.fide/g' ./scripts/properties.sh
             
-            # ৪. প্রয়োজনীয় টুলস ইনস্টল
+            # ৫. উবুন্টু বিল্ড টুলস সেটাপ
             ./scripts/setup-ubuntu.sh
             
-            # ৫. স্ক্রিপ্ট পাথ ফিক্স
+            # ৬. হার্ডকোডেড পাথ ফিক্স (আপনার এরর ফিক্সের জন্য)
             sed -i \"s|/home/builder/termux-packages|\$TERMUX_SCRIPTDIR|g\" ./scripts/build-bootstraps.sh
             
-            # ৬. বিল্ড শুরু করা
+            # ৭. বুটস্ট্র্যাপ জেনারেট করা
             ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
           "
-
 
       - name: Store artifacts
         uses: actions/upload-artifact@v4
@@ -78,7 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag_name="bootstrap-$(date +'%Y.%m.%d-%H%M')"
-          gh release create "$tag_name" --title "Bootstrap Archives (com.vault.fide) - $(date +'%Y-%m-%d')" --notes "Custom bootstrap for android-7 compatibility"
+          gh release create "$tag_name" --title "Bootstrap for com.vault.fide - $(date +'%Y-%m-%d')" --notes "Automated build for Android-7 legacy support"
           if ls ./artifacts/*.zip 1> /dev/null 2>&1; then
             gh release upload "$tag_name" ./artifacts/*.zip
           else
