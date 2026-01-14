@@ -20,7 +20,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Fix Permissions
+      - name: Fix permissions
         run: |
           git config --global --add safe.directory /__w/termux-packages/termux-packages
           chown -R builder:builder .
@@ -42,19 +42,17 @@ jobs:
 
             # Download Android NDK r29 if missing
             if [ ! -d android-ndk ]; then
-              wget https://dl.google.com/android/repository/android-ndk-r29-linux-x86_64.zip -O ndk.zip || \
-              wget https://github.com/android/ndk/releases/download/ndk-r29/android-ndk-r29-linux.zip -O ndk.zip
+              wget https://dl.google.com/android/repository/android-ndk-r29-linux.zip -O ndk.zip
               unzip -q ndk.zip
               mv android-ndk-r29 android-ndk
               rm ndk.zip
             fi
 
-            # Export environment variables
             export ANDROID_HOME=\$HOME/lib/android-sdk
             export NDK=\$HOME/lib/android-ndk
             export PATH=\$ANDROID_HOME/cmdline-tools/latest/bin:\$PATH
 
-            echo 'Android SDK and NDK r29 set up successfully'
+            echo 'Android SDK and NDK r29 installed'
           "
 
       - name: Build bootstrap archive
@@ -65,7 +63,7 @@ jobs:
             export ANDROID_HOME=\$HOME/lib/android-sdk
             export NDK=\$HOME/lib/android-ndk
 
-            # Fix default package name
+            # Change default package name
             sed -i 's/com.termux/com.vault.fide/g' ./scripts/properties.sh
 
             # Fix hardcoded paths in build script
@@ -74,7 +72,7 @@ jobs:
             # Setup Ubuntu build tools
             ./scripts/setup-ubuntu.sh
 
-            # Build bootstraps for the current architecture
+            # Build bootstrap for this arch
             ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
           "
 
@@ -99,14 +97,14 @@ jobs:
           path: ./artifacts
           merge-multiple: true
 
-      - name: Create Release and Upload
+      - name: Create release and upload artifacts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag_name="bootstrap-$(date +'%Y.%m.%d-%H%M')"
           gh release create "$tag_name" \
             --title "Bootstrap for com.vault.fide - $(date +'%Y-%m-%d')" \
-            --notes "Automated build for Android-7 legacy support"
+            --notes "Automated build for Android‑7 legacy support"
           if ls ./artifacts/*.zip 1> /dev/null 2>&1; then
             gh release upload "$tag_name" ./artifacts/*.zip
           else
