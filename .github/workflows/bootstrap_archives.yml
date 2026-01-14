@@ -36,14 +36,14 @@ jobs:
             # Download Android SDK if missing
             if [ ! -d android-sdk ]; then
               wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O sdk.zip
-              unzip -q sdk.zip -d android-sdk
+              unzip -q -o sdk.zip -d android-sdk
               rm sdk.zip
             fi
 
             # Download Android NDK r29 if missing
             if [ ! -d android-ndk ]; then
               wget https://dl.google.com/android/repository/android-ndk-r29-linux.zip -O ndk.zip
-              unzip -q ndk.zip
+              unzip -q -o ndk.zip
               mv android-ndk-r29 android-ndk
               rm ndk.zip
             fi
@@ -52,7 +52,7 @@ jobs:
             export NDK=\$HOME/lib/android-ndk
             export PATH=\$ANDROID_HOME/cmdline-tools/latest/bin:\$PATH
 
-            echo 'Android SDK and NDK r29 installed'
+            echo 'Android SDK and NDK r29 installed successfully'
           "
 
       - name: Build bootstrap archive
