@@ -5,7 +5,6 @@ permissions:
   actions: write
 
 on:
-  workflow_dispatch:
   pull_request:
     paths:
     - 'packages/golang/build.sh'
