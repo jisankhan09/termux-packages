@@ -8,37 +8,45 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         arch: [aarch64, arm, i686, x86_64]
     
-    # টার্মাক্স বিল্ড এনভায়রনমেন্টের জন্য ডকার ব্যবহার করা হচ্ছে
     container:
       image: termux/package-builder:latest
-      options: --privileged
+      options: --privileged --user root
 
     steps:
       - name: Git clone
         uses: actions/checkout@v4
 
-      - name: Fix Permissions
+      - name: Fix Permissions and Environment
         run: |
-          # ডকার কন্টেইনারে গিট পারমিশন ফিক্স
           git config --global --add safe.directory /__w/termux-packages/termux-packages
+          # ফাইলের মালিকানা builder ইউজারকে দেওয়া কারণ root হিসেবে বিল্ড করা যায় না
+          chown -R builder:builder .
 
       - name: Create bootstrap archive
         run: |
-          # ১. এনভায়রনমেন্ট পাথ ঠিক করা
-          export TERMUX_SCRIPTDIR=$(pwd)
-          
-          # ২. প্রয়োজনীয় টুলস সেটআপ করা
-          ./scripts/setup-ubuntu.sh
-          
-          # ৩. সঠিক পাথে স্ক্রিপ্টটি কল করা
-          # এখানে আমরা সরাসরি স্ক্রিপ্ট রান না করে ডকার এনভায়রনমেন্টের পাথ ধরিয়ে দিচ্ছি
-          sed -i "s|/home/builder/termux-packages|$TERMUX_SCRIPTDIR|g" ./scripts/build-bootstraps.sh
-          
-          ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
-
+          su builder -c "
+            export TERMUX_SCRIPTDIR=$(pwd)
+            # সঠিক NDK ও SDK পাথ সেট করা (termux-builder কন্টেইনার অনুযায়ী)
+            export ANDROID_HOME=/home/builder/lib/android-sdk
+            export NDK=/home/builder/lib/android-ndk
+            
+            # ১. কাস্টম প্যাকেজ নাম সেট করা
+            sed -i 's/com.termux/com.vault.fide/g' ./scripts/properties.sh
+            
+            # ২. প্রয়োজনীয় টুলস সেটআপ
+            ./scripts/setup-ubuntu.sh
+            
+            # ৩. স্ক্রিপ্টের ভেতরের হার্ডকোডেড পাথ ফিক্স করা
+            sed -i \"s|/home/builder/termux-packages|\$TERMUX_SCRIPTDIR|g\" ./scripts/build-bootstraps.sh
+            
+            # ৪. বুটস্ট্র্যাপ জেনারেট করা
+            # এনডিকে এনভায়রনমেন্ট সহ রান করা হচ্ছে
+            ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
+          "
 
       - name: Store artifacts
         uses: actions/upload-artifact@v4
@@ -66,5 +74,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag_name="bootstrap-$(date +'%Y.%m.%d-%H%M')"
-          gh release create "$tag_name" --title "Bootstrap Archives $(date +'%Y-%m-%d')" --notes "Automated build"
-          gh release upload "$tag_name" ./artifacts/*.zip
+          gh release create "$tag_name" --title "Bootstrap Archives (com.vault.fide) - $(date +'%Y-%m-%d')" --notes "Custom bootstrap for android-7 compatibility"
+          if ls ./artifacts/*.zip 1> /dev/null 2>&1; then
+            gh release upload "$tag_name" ./artifacts/*.zip
+          else
+            echo "No zip files found!"
+            exit 1
+          fi
