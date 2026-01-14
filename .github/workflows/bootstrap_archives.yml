@@ -17,7 +17,7 @@ jobs:
       options: --privileged --user root
 
     steps:
-      - name: Git clone
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Fix Permissions
@@ -25,7 +25,7 @@ jobs:
           git config --global --add safe.directory /__w/termux-packages/termux-packages
           chown -R builder:builder .
 
-      - name: Setup Android SDK & NDK
+      - name: Setup Android SDK & NDK r29
         run: |
           su builder -c "
             set -e
@@ -36,26 +36,28 @@ jobs:
             # Download Android SDK if missing
             if [ ! -d android-sdk ]; then
               wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O sdk.zip
-              unzip sdk.zip -d android-sdk
+              unzip -q sdk.zip -d android-sdk
               rm sdk.zip
             fi
 
-            # Download Android NDK if missing
+            # Download Android NDK r29 if missing
             if [ ! -d android-ndk ]; then
-              wget https://dl.google.com/android/repository/android-ndk-r29b-linux.zip -O ndk.zip
-              unzip ndk.zip
-              mv android-ndk-r25b android-ndk
+              wget https://dl.google.com/android/repository/android-ndk-r29-linux-x86_64.zip -O ndk.zip || \
+              wget https://github.com/android/ndk/releases/download/ndk-r29/android-ndk-r29-linux.zip -O ndk.zip
+              unzip -q ndk.zip
+              mv android-ndk-r29 android-ndk
               rm ndk.zip
             fi
 
+            # Export environment variables
             export ANDROID_HOME=\$HOME/lib/android-sdk
             export NDK=\$HOME/lib/android-ndk
             export PATH=\$ANDROID_HOME/cmdline-tools/latest/bin:\$PATH
 
-            echo 'Android SDK and NDK set up successfully'
+            echo 'Android SDK and NDK r29 set up successfully'
           "
 
-      - name: Create bootstrap archive
+      - name: Build bootstrap archive
         run: |
           su builder -c "
             set -e
@@ -69,14 +71,14 @@ jobs:
             # Fix hardcoded paths in build script
             sed -i \"s|/home/builder/termux-packages|\$TERMUX_SCRIPTDIR|g\" ./scripts/build-bootstraps.sh
 
-            # Ensure Ubuntu build tools
+            # Setup Ubuntu build tools
             ./scripts/setup-ubuntu.sh
 
-            # Build bootstraps
+            # Build bootstraps for the current architecture
             ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
           "
 
-      - name: Store artifacts
+      - name: Upload bootstrap artifacts
         uses: actions/upload-artifact@v4
         with:
           name: bootstrap-${{ matrix.arch }}
@@ -88,10 +90,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Git clone
+      - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Fetch bootstrap archives
+      - name: Download bootstrap artifacts
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
@@ -102,7 +104,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag_name="bootstrap-$(date +'%Y.%m.%d-%H%M')"
-          gh release create "$tag_name" --title "Bootstrap for com.vault.fide - $(date +'%Y-%m-%d')" --notes "Automated build for Android-7 legacy support"
+          gh release create "$tag_name" \
+            --title "Bootstrap for com.vault.fide - $(date +'%Y-%m-%d')" \
+            --notes "Automated build for Android-7 legacy support"
           if ls ./artifacts/*.zip 1> /dev/null 2>&1; then
             gh release upload "$tag_name" ./artifacts/*.zip
           else
