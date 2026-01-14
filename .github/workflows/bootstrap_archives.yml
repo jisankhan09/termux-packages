@@ -1,71 +1,61 @@
 name: Generate bootstrap archives (android-7)
 
 on:
-  schedule:
-    - cron: "0 0 * * 0"
   workflow_dispatch:
   push:
 
-permissions: {} # none
-
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
-
 jobs:
   build:
-    permissions:
-      contents: read # actions/upload-artifact doesn't need contents: write
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch:
-          - aarch64
-          - arm
-          - i686
-          - x86_64
+        arch: [aarch64, arm, i686, x86_64]
+    
+    # টার্মাক্স বিল্ড এনভায়রনমেন্টের জন্য ডকার ব্যবহার করা হচ্ছে
+    container:
+      image: termux/package-builder:latest
+      options: --privileged
+
     steps:
       - name: Git clone
-        uses: actions/checkout@v6
-      - name: Create bootstrap archive
-        run: ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
-      - name: Store artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: bootstrap-archives-${{ matrix.arch }}-${{ github.sha }}
-          path: "*.zip"
-  publish:
-    permissions:
-      contents: write # for git push
-    needs: build
-    runs-on: ubuntu-slim
-    steps:
-      - name: Git clone
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Fetch bootstrap archives
-        uses: actions/download-artifact@v7
-        with:
-          merge-multiple: true
-          path: ./
-      - name: Create new tag
-        id: get_tag
+        uses: actions/checkout@v4
+
+      - name: Fix Permissions
         run: |
-          new_tag="bootstrap-$(date "+%Y.%m.%d")"
-          existing_tag_revision=$(git tag | grep "$new_tag" | sort -r | head -n 1 | cut -d- -f3 | cut -dr -f2)
-          if [ -n "$existing_tag_revision" ]; then
-            tag_rev=$((existing_tag_revision + 1))
-          else
-            tag_rev=1
-          fi
-          new_tag="${new_tag}-r${tag_rev}+apt.android-7"
-          echo "tag_name=$new_tag" >> $GITHUB_OUTPUT
-      - name: Publish bootstrap zips to GitHub release
+          # ডকার কন্টেইনারে গিট পারমিশন ফিক্স
+          git config --global --add safe.directory /__w/termux-packages/termux-packages
+
+      - name: Create bootstrap archive
+        run: |
+          # গুরুত্বপূর্ণ: বুটস্ট্র্যাপ স্ক্রিপ্ট রান করার আগে এনভায়রনমেন্ট সেটআপ
+          ./scripts/setup-ubuntu.sh
+          ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
+
+      - name: Store artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-${{ matrix.arch }}
+          path: "*.zip"
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Git clone
+        uses: actions/checkout@v4
+      
+      - name: Fetch bootstrap archives
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          merge-multiple: true
+
+      - name: Create Release and Upload
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create ${{ steps.get_tag.outputs.tag_name }} --title "Bootstrap archives for Termux application (apt.android-7)"
-          for file in *.zip; do
-            gh release upload ${{ steps.get_tag.outputs.tag_name }} "$file"
-          done
+          tag_name="bootstrap-$(date +'%Y.%m.%d-%H%M')"
+          gh release create "$tag_name" --title "Bootstrap Archives $(date +'%Y-%m-%d')" --notes "Automated build"
+          gh release upload "$tag_name" ./artifacts/*.zip
