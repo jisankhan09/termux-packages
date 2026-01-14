@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [aarch64, arm, i686, x86_64]
+        arch: [aarch64, arm]
     
     container:
       image: termux/package-builder:latest
@@ -20,36 +20,59 @@ jobs:
       - name: Git clone
         uses: actions/checkout@v4
 
-      - name: Fix Permissions and Environment
+      - name: Fix Permissions
         run: |
           git config --global --add safe.directory /__w/termux-packages/termux-packages
           chown -R builder:builder .
 
+      - name: Setup Android SDK & NDK
+        run: |
+          su builder -c "
+            set -e
+            export TERMUX_SCRIPTDIR=$(pwd)
+            mkdir -p \$HOME/lib
+            cd \$HOME/lib
+
+            # Download Android SDK if missing
+            if [ ! -d android-sdk ]; then
+              wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O sdk.zip
+              unzip sdk.zip -d android-sdk
+              rm sdk.zip
+            fi
+
+            # Download Android NDK if missing
+            if [ ! -d android-ndk ]; then
+              wget https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
+              unzip ndk.zip
+              mv android-ndk-r25b android-ndk
+              rm ndk.zip
+            fi
+
+            export ANDROID_HOME=\$HOME/lib/android-sdk
+            export NDK=\$HOME/lib/android-ndk
+            export PATH=\$ANDROID_HOME/cmdline-tools/latest/bin:\$PATH
+
+            echo 'Android SDK and NDK set up successfully'
+          "
+
       - name: Create bootstrap archive
         run: |
           su builder -c "
-            # ১. বর্তমান কাজের ডিরেক্টরি সেট করা
+            set -e
             export TERMUX_SCRIPTDIR=$(pwd)
-            
-            # ২. NDK ও SDK কনফিগারেশন (এটি নিশ্চিত করবে যে পাথ সঠিক আছে)
-            # এটি এনডিকে খুঁজে না পেলে নতুন করে ডাউনলোড করবে
-            ./scripts/setup-android-sdk.sh
-            
-            # ৩. এনভায়রনমেন্ট ভ্যারিয়েবল এক্সপোর্ট (নতুন পাথ অনুযায়ী)
             export ANDROID_HOME=\$HOME/lib/android-sdk
             export NDK=\$HOME/lib/android-ndk
-            
-            # ৪. কাস্টম প্যাকেজ নাম com.vault.fide সেট করা
-            # এটি properties.sh ফাইলে ডিফল্ট com.termux পরিবর্তন করে দেবে
+
+            # Fix default package name
             sed -i 's/com.termux/com.vault.fide/g' ./scripts/properties.sh
-            
-            # ৫. উবুন্টু বিল্ড টুলস সেটাপ
-            ./scripts/setup-ubuntu.sh
-            
-            # ৬. হার্ডকোডেড পাথ ফিক্স (আপনার এরর ফিক্সের জন্য)
+
+            # Fix hardcoded paths in build script
             sed -i \"s|/home/builder/termux-packages|\$TERMUX_SCRIPTDIR|g\" ./scripts/build-bootstraps.sh
-            
-            # ৭. বুটস্ট্র্যাপ জেনারেট করা
+
+            # Ensure Ubuntu build tools
+            ./scripts/setup-ubuntu.sh
+
+            # Build bootstraps
             ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
           "
 
