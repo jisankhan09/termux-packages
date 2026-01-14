@@ -15,7 +15,6 @@ on:
     - 'packages/**'
     - 'root-packages/**'
     - 'x11-packages/**'
-  workflow_dispatch:
     inputs:
       packages:
         description: "A space-separated names of packages selected for rebuilding"
