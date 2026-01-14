@@ -30,23 +30,27 @@ jobs:
         run: |
           su builder -c "
             export TERMUX_SCRIPTDIR=$(pwd)
-            # সঠিক NDK ও SDK পাথ সেট করা (termux-builder কন্টেইনার অনুযায়ী)
-            export ANDROID_HOME=/home/builder/lib/android-sdk
-            export NDK=/home/builder/lib/android-ndk
             
-            # ১. কাস্টম প্যাকেজ নাম সেট করা
+            # ১. NDK এবং SDK অটো-সেটআপ (যদি পাথ ভুল থাকে তবে এটি ডাউনলোড/ফিক্স করবে)
+            ./scripts/setup-android-sdk.sh
+            
+            # ২. এনভায়রনমেন্ট পাথগুলো পুনরায় সেট করা
+            export ANDROID_HOME=\$HOME/lib/android-sdk
+            export NDK=\$HOME/lib/android-ndk
+            
+            # ৩. কাস্টম প্যাকেজ নাম সেট করা
             sed -i 's/com.termux/com.vault.fide/g' ./scripts/properties.sh
             
-            # ২. প্রয়োজনীয় টুলস সেটআপ
+            # ৪. প্রয়োজনীয় টুলস ইনস্টল
             ./scripts/setup-ubuntu.sh
             
-            # ৩. স্ক্রিপ্টের ভেতরের হার্ডকোডেড পাথ ফিক্স করা
+            # ৫. স্ক্রিপ্ট পাথ ফিক্স
             sed -i \"s|/home/builder/termux-packages|\$TERMUX_SCRIPTDIR|g\" ./scripts/build-bootstraps.sh
             
-            # ৪. বুটস্ট্র্যাপ জেনারেট করা
-            # এনডিকে এনভায়রনমেন্ট সহ রান করা হচ্ছে
+            # ৬. বিল্ড শুরু করা
             ./scripts/build-bootstraps.sh --architectures ${{ matrix.arch }}
           "
+
 
       - name: Store artifacts
         uses: actions/upload-artifact@v4
